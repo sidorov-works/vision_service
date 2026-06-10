@@ -11,6 +11,7 @@
 from abc import ABC, abstractmethod
 from typing import Any
 from PIL import Image
+from mlx_vlm.prompt_utils import apply_chat_template
 
 
 class MLXInferenceStrategy(ABC):
@@ -42,7 +43,6 @@ class SmolVLMMLXStrategy(MLXInferenceStrategy):
     """Стратегия для SmolVLM на MLX."""
     
     def format_prompt(self, processor: Any, config: Any, prompt: str, image: Image.Image) -> str:
-        from mlx_vlm.prompt_utils import apply_chat_template
         return apply_chat_template(
             processor, 
             config, 
@@ -56,7 +56,6 @@ class PaddleOCRMLXStrategy(MLXInferenceStrategy):
     """Стратегия для PaddleOCR-VL на MLX."""
     
     def format_prompt(self, processor: Any, config: Any, prompt: str, image: Image.Image) -> str:
-        from mlx_vlm.prompt_utils import apply_chat_template
         # PaddleOCR-VL использует короткий промпт "OCR:" по умолчанию
         if not prompt:
             prompt = "OCR:"
@@ -73,7 +72,6 @@ class GLMOCRMLXStrategy(MLXInferenceStrategy):
     """Стратегия для GLM-OCR на MLX."""
     
     def format_prompt(self, processor: Any, config: Any, prompt: str, image: Image.Image) -> str:
-        from mlx_vlm.prompt_utils import apply_chat_template
         return apply_chat_template(
             processor, 
             config, 
@@ -87,7 +85,6 @@ class LightOnOCRMLXStrategy(MLXInferenceStrategy):
     """Стратегия для LightOnOCR на MLX."""
     
     def format_prompt(self, processor: Any, config: Any, prompt: str, image: Image.Image) -> str:
-        from mlx_vlm.prompt_utils import apply_chat_template
         return apply_chat_template(
             processor, 
             config, 
@@ -106,7 +103,6 @@ class LFM25VLMLXStrategy(MLXInferenceStrategy):
     """
     
     def format_prompt(self, processor: Any, config: Any, prompt: str, image: Image.Image) -> str:
-        from mlx_vlm.prompt_utils import apply_chat_template
         return apply_chat_template(
             processor, 
             config, 

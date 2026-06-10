@@ -362,9 +362,15 @@ async def describe_batch(request: Request, batch_request: DescribeBatchRequest, 
 @limiter.limit(config.RATE_LIMIT_HEALTH)
 async def health_check(request: Request):
     if not worker.is_healthy():
+        status = "loading" if worker.backend is None else "unhealthy"
         return JSONResponse(
             status_code=503,
-            content={"status": "unhealthy", "backend": config.BACKEND, "model": config.MODEL}
+            content={
+                "status": status,
+                "backend": config.BACKEND,
+                "model": config.MODEL,
+                "message": "Model is still loading" if worker.backend is None else "Backend initialization failed"
+            }
         )
     return HealthResponse(
         status="healthy",

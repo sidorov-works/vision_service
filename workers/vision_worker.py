@@ -44,6 +44,16 @@ class VisionWorker:
         self.backend: Optional[VisionBackend] = None
         self.tasks_processed = 0
         self._initialized = asyncio.Event()
+        
+        # Флаг, указывающий на то, что инициализация бэкенда окончательно провалилась.
+        # Нужен для того, чтобы воркер не ждал вечно self.backend, если при загрузке
+        # модели произошла ошибка (например, нет прав на файл, не хватило памяти,
+        # модель несовместима с бэкендом, истёк таймаут скачивания и т.д.).
+        # Без этого флага при провале инициализации воркер продолжает работать,
+        # но self.backend навсегда остаётся None, и все задачи будут висеть
+        # до таймаута WAIT_FOR_BACKEND_TIMEOUT (60 секунд), после чего падать с ошибкой.
+        # С этим флагом задачи сразу получают ошибку, не заставляя клиента ждать.
+        self._init_failed = False
 
     async def initialize(self):
         """Создаёт и инициализирует бэкенд."""
@@ -74,6 +84,20 @@ class VisionWorker:
         while self.running:
             try:
                 task = await asyncio.wait_for(self.input_queue.get(), timeout=1.0)
+                
+                # Если инициализация бэкенда уже провалилась, не ждём и не пытаемся
+                # обработать задачу — сразу возвращаем ошибку клиенту.
+                # Это позволяет клиенту получить ответ мгновенно, а не ждать
+                # WAIT_FOR_BACKEND_TIMEOUT секунд до таймаута.
+                if self._init_failed:
+                    result = VisionResult(
+                        task_id=task.task_id,
+                        success=False,
+                        error="Backend initialization failed - service misconfigured"
+                    )
+                    await self.output_queue.put(result)
+                    self.input_queue.task_done()
+                    continue
                 
                 # Ждём бэкенд с таймаутом
                 timeout = config.WAIT_FOR_BACKEND_TIMEOUT  # Максимальное время ожидания инициализации
@@ -107,6 +131,12 @@ class VisionWorker:
             await self.initialize()
             logger.info("Backend initialized successfully")
         except Exception as e:
+            # Инициализация провалилась. Устанавливаем флаг, чтобы воркер знал
+            # об этом и не пытался обрабатывать задачи.
+            # Само исключение не перевыбрасываем, так как оно уже залогировано,
+            # и воркер должен продолжить работу в режиме "возвращать ошибки на все запросы",
+            # а не падать полностью.
+            self._init_failed = True
             logger.error(f"Failed to initialize backend: {e}")
 
     async def _process_task(self, task: VisionTask) -> VisionResult:

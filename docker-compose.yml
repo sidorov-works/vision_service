@@ -1,42 +1,17 @@
 services:
-  # ocr-glm:
-  #   build: .
-  #   ports:
-  #     - "8399:8080"
-  #   environment:
-  #     - BACKEND=transformers
-  #     - MODEL=glm-ocr
-  #     - DEVICE=cuda
-  #     - MODELS_ROOT=/app/models
-  #     - DOCKER_ENV=true
-  #   volumes:
-  #     - ./models:/app/models
-  #     - ./logs:/app/logs
-  #   deploy:
-  #     resources:
-  #       reservations:
-  #         devices:
-  #           - driver: nvidia
-  #             count: 1
-  #             capabilities: [gpu]
-  #   restart: unless-stopped
-
-  describe-qwen:
+  describe-lfm25-vl:
     build: .
     ports:
-      - "8349:8080"
+      - "8399:8080"
     environment:
       - BACKEND=transformers
-      - MODEL=qwen25-vl
+      - MODEL=lfm25-vl
       - DEVICE=cuda
       - MODELS_ROOT=/app/models
       - DOCKER_ENV=true
     volumes:
       - ./models:/app/models
       - ./logs:/app/logs
-      - ./.env:/app/.env
-      - ./shared/config.py:/app/shared/config.py
-      - ./shared/model_configs.py:/app/shared/model_configs.py
     deploy:
       resources:
         reservations:
@@ -45,3 +20,28 @@ services:
               count: 1
               capabilities: [gpu]
     restart: unless-stopped
+
+  # describe-qwen:
+  #   build: .
+  #   ports:
+  #     - "8349:8080"
+  #   environment:
+  #     - BACKEND=transformers
+  #     - MODEL=qwen25-vl
+  #     - DEVICE=cuda
+  #     - MODELS_ROOT=/app/models
+  #     - DOCKER_ENV=true
+  #   volumes:
+  #     - ./models:/app/models
+  #     - ./logs:/app/logs
+  #     - ./.env:/app/.env
+  #     - ./shared/config.py:/app/shared/config.py
+  #     - ./shared/model_configs.py:/app/shared/model_configs.py
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: 1
+  #             capabilities: [gpu]
+  #   restart: unless-stopped
