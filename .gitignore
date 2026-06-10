@@ -1,0 +1,13 @@
+.env
+.env.*
+!.env*.example
+__pycache__
+/venv
+/logs
+.DS_Store
+dump.rdb
+/llm
+/models
+/data
+docker-compose.override.yml
+procfile

@@ -1,0 +1,39 @@
+# Python
+__pycache__
+*.pyc
+*.pyo
+venv
+.venv
+*.egg-info
+
+# MLX
+shared/backend/mlx.py
+shared/strategies/mlx_strategies.py
+
+# Git
+.git
+.gitignore
+
+# Models (скачиваются при запуске, не нужны в образе)
+models/
+
+# Logs
+logs/
+
+# Env
+.env.example
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.yml
+Dockerfile
+.dockerignore
