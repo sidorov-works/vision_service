@@ -1,4 +1,4 @@
-# requirements.glm.txt
+# requirements/glm.txt
 
 # CRITICAL: GLM-OCR требует transformers >= 5.1.0
 # Стандартная версия из PyPI (4.57.0) НЕ ПОДХОДИТ!
