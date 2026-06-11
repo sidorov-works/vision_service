@@ -1,0 +1,19 @@
+# dockerfile.glm
+
+# GLM-OCR - специализированная OCR модель от Zhipu AI
+# ВНИМАНИЕ: GLM-OCR требует transformers версии 5.1.0+, которая ещё не вышла на PyPI
+# Устанавливаем из исходников GitHub
+FROM vision-base:latest
+
+# Устанавливаем специфичные зависимости для GLM-OCR
+# Ключевой момент: pip install git+https://github.com/huggingface/transformers.git
+COPY requirements.glm.txt .
+RUN pip install --no-cache-dir -r requirements.glm.txt
+
+# Переменные окружения для этой модели
+ENV BACKEND=transformers      
+ENV MODEL=glm-ocr           
+ENV DEVICE=cuda             
+
+# Запускаем Uvicorn с 1 воркером
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "1"]

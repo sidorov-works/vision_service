@@ -1,0 +1,13 @@
+# requirements.qwen.txt
+
+# Qwen2.5-VL требует transformers 4.57.0
+transformers==4.57.0
+
+# Ускоритель
+accelerate==1.13.0
+
+# Токенизатор
+tokenizers==0.22.0
+
+# Специфическая библиотека для Qwen с утилитами обработки изображений
+qwen-vl-utils==0.0.10

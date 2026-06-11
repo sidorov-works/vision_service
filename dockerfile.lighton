@@ -1,0 +1,14 @@
+# dockerfile.lighton
+
+# LightOnOCR-2-1B - специализированная OCR модель
+# ВНИМАНИЕ: Требует transformers >= 5.0.0 (из исходников)
+FROM vision-base:latest
+
+COPY requirements.lighton.txt .
+RUN pip install --no-cache-dir -r requirements.lighton.txt
+
+ENV BACKEND=transformers
+ENV MODEL=lighton
+ENV DEVICE=cuda
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "1"]

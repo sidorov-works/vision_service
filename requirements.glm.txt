@@ -1,0 +1,15 @@
+# requirements.glm.txt
+
+# CRITICAL: GLM-OCR требует transformers >= 5.1.0
+# Стандартная версия из PyPI (4.57.0) НЕ ПОДХОДИТ!
+# Устанавливаем из исходников GitHub
+git+https://github.com/huggingface/transformers.git
+
+# Ускоритель
+accelerate==1.13.0
+
+# Токенизатор (будет установлен вместе с transformers)
+tokenizers
+
+# Безопасные тензоры
+safetensors==0.7.0

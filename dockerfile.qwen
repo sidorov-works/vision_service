@@ -1,0 +1,17 @@
+# dockerfile.qwen
+
+# Qwen2.5-VL (3B параметров) - мощная мультиязычная VLM от Alibaba
+FROM vision-base:latest
+
+# Устанавливаем специфичные зависимости для Qwen2.5-VL
+# ВНИМАНИЕ: Qwen2.5-VL требует дополнительную библиотеку qwen-vl-utils
+COPY requirements.qwen.txt .
+RUN pip install --no-cache-dir -r requirements.qwen.txt
+
+# Переменные окружения для этой модели
+ENV BACKEND=transformers 
+ENV MODEL=qwen25-vl  
+ENV DEVICE=cuda   
+
+# Запускаем Uvicorn с 1 воркером (модель занимает ~8GB VRAM)
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "1"]

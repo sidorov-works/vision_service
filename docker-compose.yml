@@ -1,17 +1,36 @@
+version: '3.8'
+
+# Сети для внутренней коммуникации между сервисами
+networks:
+  vision-network:
+    driver: bridge
+
 services:
-  describe-lfm25-vl:
-    build: .
+  # ================================================================
+  # LFM2.5-VL - лёгкая модель 450M параметров
+  # Порт: 8249
+  # Потребление VRAM: ~2-3GB
+  # ================================================================
+  lfm25-vl:
+    build:
+      context: .
+      dockerfile: Dockerfile.lfm25
+    image: vision-lfm25:latest
+    container_name: vision-lfm25
     ports:
-      - "8399:8080"
+      - "8249:8080"
     environment:
-      - BACKEND=transformers
       - MODEL=lfm25-vl
+      - BACKEND=transformers
       - DEVICE=cuda
+      - HF_TOKEN=${HF_TOKEN}
       - MODELS_ROOT=/app/models
-      - DOCKER_ENV=true
+      - LOG_PATH=/app/logs
+      - LOGGING_LEVEL=INFO
     volumes:
-      - ./models:/app/models
-      - ./logs:/app/logs
+      - ./models:/app/models          # Персистентное хранение моделей
+      - ./logs:/app/logs              # Логи
+      - ./.env:/app/.env              # Переменные окружения
     deploy:
       resources:
         reservations:
@@ -20,28 +39,135 @@ services:
               count: 1
               capabilities: [gpu]
     restart: unless-stopped
+    networks:
+      - vision-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
-  # describe-qwen:
-  #   build: .
-  #   ports:
-  #     - "8349:8080"
-  #   environment:
-  #     - BACKEND=transformers
-  #     - MODEL=qwen25-vl
-  #     - DEVICE=cuda
-  #     - MODELS_ROOT=/app/models
-  #     - DOCKER_ENV=true
-  #   volumes:
-  #     - ./models:/app/models
-  #     - ./logs:/app/logs
-  #     - ./.env:/app/.env
-  #     - ./shared/config.py:/app/shared/config.py
-  #     - ./shared/model_configs.py:/app/shared/model_configs.py
-  #   deploy:
-  #     resources:
-  #       reservations:
-  #         devices:
-  #           - driver: nvidia
-  #             count: 1
-  #             capabilities: [gpu]
-  #   restart: unless-stopped
+  # ================================================================
+  # Qwen2.5-VL - мощная модель 3B параметров
+  # Порт: 8349
+  # Потребление VRAM: ~8GB в fp16
+  # ================================================================
+  qwen25-vl:
+    build:
+      context: .
+      dockerfile: Dockerfile.qwen
+    image: vision-qwen:latest
+    container_name: vision-qwen
+    ports:
+      - "8349:8080"
+    environment:
+      - MODEL=qwen25-vl
+      - BACKEND=transformers
+      - DEVICE=cuda
+      - HF_TOKEN=${HF_TOKEN}
+      - MODELS_ROOT=/app/models
+      - LOG_PATH=/app/logs
+      - LOGGING_LEVEL=INFO
+      - USE_FLASH_ATTENTION=false     # Включать только если GPU поддерживает
+    volumes:
+      - ./models:/app/models
+      - ./logs:/app/logs
+      - ./.env:/app/.env
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+    networks:
+      - vision-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ================================================================
+  # GLM-OCR - специализированная OCR модель
+  # Порт: 8399
+  # ВНИМАНИЕ: Требует transformers из исходников (>=5.1.0)
+  # ================================================================
+  glm-ocr:
+    build:
+      context: .
+      dockerfile: Dockerfile.glm
+    image: vision-glm:latest
+    container_name: vision-glm
+    ports:
+      - "8399:8080"
+    environment:
+      - MODEL=glm-ocr
+      - BACKEND=transformers
+      - DEVICE=cuda
+      - HF_TOKEN=${HF_TOKEN}
+      - MODELS_ROOT=/app/models
+      - LOG_PATH=/app/logs
+      - LOGGING_LEVEL=INFO
+    volumes:
+      - ./models:/app/models
+      - ./logs:/app/logs
+      - ./.env:/app/.env
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+    networks:
+      - vision-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+# ================================================================
+# LightOnOCR-2-1B - специализированная OCR модель
+# Порт: 8499
+# ВНИМАНИЕ: Требует transformers >= 5.0.0 (из исходников)
+# ================================================================
+lighton:
+  build:
+    context: .
+    dockerfile: Dockerfile.lighton
+  image: vision-lighton:latest
+  container_name: vision-lighton
+  ports:
+    - "8499:8080"
+  environment:
+    - MODEL=lighton
+    - BACKEND=transformers
+    - DEVICE=cuda
+    - HF_TOKEN=${HF_TOKEN}
+    - MODELS_ROOT=/app/models
+    - LOG_PATH=/app/logs
+    - LOGGING_LEVEL=INFO
+  volumes:
+    - ./models:/app/models
+    - ./logs:/app/logs
+    - ./.env:/app/.env
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            count: 1
+            capabilities: [gpu]
+  restart: unless-stopped
+  networks:
+    - vision-network
+  healthcheck:
+    test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+    interval: 30s
+    timeout: 10s
+    retries: 3
+    start_period: 120s

@@ -45,7 +45,7 @@ class ModelConfig:
 # Реестр моделей
 MODEL_REGISTRY: Dict[str, ModelConfig] = {
     # ======================================================================
-    # OCR-специализированные (работают только с Text Recognition промптом)
+    # OCR-специализированные 
     # ======================================================================
     "paddle-ocr": ModelConfig(
         transformers_id="PaddlePaddle/PaddleOCR-VL",
@@ -59,8 +59,7 @@ MODEL_REGISTRY: Dict[str, ModelConfig] = {
         }
     ),
     "glm-ocr": ModelConfig(
-        # transformers_id="zai-org/GLM-OCR",
-        transformers_id = None,
+        transformers_id="zai-org/GLM-OCR",
         mlx_id="mlx-community/GLM-OCR-bf16",
         strategy_key="glm-ocr",
         default_prompt="Text Recognition:",
@@ -71,8 +70,7 @@ MODEL_REGISTRY: Dict[str, ModelConfig] = {
         }
     ),
     "lighton": ModelConfig(
-        # transformers_id="lightonai/LightOnOCR-2-1B",
-        transformers_id=None, # не используем в проде (требует transformers>=5.0.0)
+        transformers_id="lightonai/LightOnOCR-2-1B", # в проде требует transformers>=5.0.0
         mlx_id="mlx-community/LightOnOCR-2-1B-8bit",
         strategy_key="lighton",
         default_prompt="Extract text from this image.",
@@ -82,8 +80,9 @@ MODEL_REGISTRY: Dict[str, ModelConfig] = {
             "temperature": 0.1,
         }
     ),
+
     # ======================================================================
-    # VLM-модели (поддерживают любые промпты: OCR, описание, вопросы)
+    # VLM-модели (будут использоваться для описания изображений)
     # ======================================================================
     "smolvlm": ModelConfig(
         transformers_id="HuggingFaceTB/SmolVLM-256M-Instruct",
