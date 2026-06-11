@@ -5,8 +5,8 @@ FROM vision-base:latest
 
 # Устанавливаем специфичные зависимости для LFM2.5-VL
 # ВНИМАНИЕ: LFM2.5-VL работает с transformers версии 4.57.0
-COPY requirements.lfm25.txt .
-RUN pip install --no-cache-dir -r requirements.lfm25.txt
+COPY requirements/lfm25.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Переменные окружения для этой модели
 ENV BACKEND=transformers 

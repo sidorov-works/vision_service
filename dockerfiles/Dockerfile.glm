@@ -7,8 +7,8 @@ FROM vision-base:latest
 
 # Устанавливаем специфичные зависимости для GLM-OCR
 # Ключевой момент: pip install git+https://github.com/huggingface/transformers.git
-COPY requirements.glm.txt .
-RUN pip install --no-cache-dir -r requirements.glm.txt
+COPY requirements/glm.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Переменные окружения для этой модели
 ENV BACKEND=transformers      

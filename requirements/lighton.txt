@@ -1,0 +1,9 @@
+# requirements/lighton.txt
+
+# LightOnOCR-2-1B требует transformers >= 5.0.0
+# Стандартная версия из PyPI не подходит!
+git+https://github.com/huggingface/transformers.git
+
+accelerate==1.13.0
+tokenizers
+safetensors==0.7.0

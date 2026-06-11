@@ -78,7 +78,7 @@ echo ""
 
 # Функция для сборки образа
 build_image() {
-    local dockerfile=$1
+    local dockerfile="dockerfiles/$1"
     local image_name=$2
     local description=$3
     

@@ -1,294 +1,267 @@
-### Для продакшен: добавление моделей и сборка Docker образов
+## Сборка Docker образов - подробная инструкция
 
-#### Быстрый старт
+### 1. Подготовка
 
-**1. Сборка всех образов:**
-```bash
-chmod +x build.sh
-./build.sh
-```
-
-**2. Запуск сервисов:**
-```bash
-docker-compose up -d
-```
-
-**3. Проверка работы:**
-```bash
-curl http://localhost:8249/health  # LFM25-VL
-curl http://localhost:8349/health  # Qwen2.5-VL
-curl http://localhost:8399/health  # GLM-OCR
-```
-
----
-
-#### Архитектура сборки
-
-Проект использует **многослойную сборку Docker**:
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Dockerfile.base                          │
-│  (PyTorch + CUDA + общие зависимости + общий код)           │
-│  Собирается один раз, используется всеми моделями           │
-└─────────────────────────────────────────────────────────────┘
-                              │
-        ┌─────────────────────┼─────────────────────┐
-        ▼                     ▼                     ▼
-┌───────────────┐    ┌───────────────┐    ┌───────────────┐
-│Dockerfile.lfm25│    │Dockerfile.qwen│    │Dockerfile.glm │
-│ + специфичные  │    │ + специфичные  │    │ + специфичные  │
-│ зависимости    │    │ зависимости    │    │ зависимости    │
-└───────────────┘    └───────────────┘    └───────────────┘
-```
-
-**Преимущества:**
-- Общий код и базовые зависимости не дублируются
-- Каждая модель получает свои версии библиотек (нет конфликтов)
-- Пересборка конкретной модели не требует пересборки всего
-
----
-
-#### Добавление новой модели
-
-##### Шаг 1: Добавить модель в реестр (`shared/model_configs.py`)
-
-```python
-"новая-модель": ModelConfig(
-    transformers_id="author/model-name",      # ID на HuggingFace
-    mlx_id="mlx-community/model-name",        # ID для MLX (если есть)
-    strategy_key="новая-модель",              # Ключ стратегии
-    default_prompt="Describe this image.",    # Промпт по умолчанию
-    generation_params={
-        "max_new_tokens": 512,
-        "do_sample": False,
-        "temperature": 0.1,
-    }
-),
-```
-
-##### Шаг 2: Создать стратегию инференса (`shared/strategies/transformers_strategies.py`)
-
-```python
-class NewModelStrategy(InferenceStrategy):
-    def __init__(self):
-        self.model = None
-        self.processor = None
-
-    async def load_model(self, model_id: str, cache_dir: Path, device: str):
-        from transformers import AutoModelForCausalLM, AutoProcessor
-        
-        def _load():
-            processor = AutoProcessor.from_pretrained(
-                model_id, trust_remote_code=True, cache_dir=str(cache_dir)
-            )
-            torch_dtype, device_map = _get_dtype_and_device_map(device)
-            model = AutoModelForCausalLM.from_pretrained(
-                model_id, trust_remote_code=True, 
-                dtype=torch_dtype, device_map=device_map, cache_dir=str(cache_dir)
-            )
-            model.eval()
-            return processor, model
-        
-        self.processor, self.model = await asyncio.to_thread(_load)
-
-    async def infer(self, image_bytes: bytes, prompt: str, generation_params=None):
-        # Реализация инференса
-        pass
-
-    def cleanup(self):
-        if self.model:
-            del self.model
-            torch.cuda.empty_cache()
-
-# Добавить в реестр стратегий
-STRATEGY_REGISTRY["новая-модель"] = NewModelStrategy
-```
-
-##### Шаг 3: Создать Dockerfile для модели
-
-```dockerfile
-# Dockerfile.newmodel
-FROM vision-base:latest
-
-COPY requirements.newmodel.txt .
-RUN pip install --no-cache-dir -r requirements.newmodel.txt
-
-ENV BACKEND=transformers
-ENV MODEL=новая-модель
-ENV DEVICE=cuda
-
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "1"]
-```
-
-##### Шаг 4: Создать файл зависимостей
-
-```txt
-# requirements.newmodel.txt
-transformers==4.57.0
-accelerate==1.13.0
-# другие специфичные зависимости
-```
-
-##### Шаг 5: Добавить сервис в `docker-compose.yml`
-
-```yaml
-newmodel:
-  build:
-    context: .
-    dockerfile: Dockerfile.newmodel
-  image: vision-newmodel:latest
-  container_name: vision-newmodel
-  ports:
-    - "8499:8080"
-  environment:
-    - MODEL=новая-модель
-    - HF_TOKEN=${HF_TOKEN}
-    - MODELS_ROOT=/app/models
-  volumes:
-    - ./models:/app/models
-    - ./logs:/app/logs
-  deploy:
-    resources:
-      reservations:
-        devices:
-          - driver: nvidia
-            count: 1
-  restart: unless-stopped
-```
-
-##### Шаг 6: Добавить сборку в `build.sh`
-
-```bash
-echo -e "${GREEN}[5/5] Building NewModel image...${NC}"
-docker build -f Dockerfile.newmodel -t vision-newmodel:latest .
-```
-
----
-
-#### Важные замечания по зависимостям
-
-**Разные модели могут требовать разные версии transformers:**
-
-| Модель | Версия transformers | Особенности |
-|--------|---------------------|-------------|
-| LFM2.5-VL | 4.57.0 (PyPI) | Стандартная установка |
-| Qwen2.5-VL | 4.57.0 + qwen-vl-utils | Дополнительная библиотека |
-| GLM-OCR | >=5.1.0 (из GitHub) | Установка из исходников |
-
-**Почему нельзя один requirements.txt:**
-- GLM-OCR требует `git+https://github.com/huggingface/transformers.git`
-- Qwen требует `qwen-vl-utils==0.0.10`
-- LFM работает со стандартным пакетом
-
-Изоляция через разные Dockerfile решает эту проблему.
-
----
-
-#### Рабочий процесс разработки
-
-**Локальная разработка (Mac с MLX):**
-```bash
-# Не нужны Dockerfile.base и сложная сборка
-BACKEND=mlx MODEL=smolvlm uvicorn main:app --reload
-```
-
-**Продакшен (CUDA сервер):**
-```bash
-# Сборка и запуск через Docker
-./build.sh && docker-compose up -d
-```
-
----
-
-#### Команды управления
-
-```bash
-# Сборка всех образов
-./build.sh
-
-# Сборка только конкретной модели
-docker build -f Dockerfile.qwen -t vision-qwen:latest .
-
-# Запуск всех сервисов
-docker-compose up -d
-
-# Запуск конкретного сервиса
-docker-compose up -d qwen25-vl
-
-# Просмотр логов
-docker-compose logs -f glm-ocr
-
-# Перезапуск сервиса после изменений
-docker-compose restart lfm25-vl
-
-# Остановка всех сервисов
-docker-compose down
-
-# Очистка неиспользуемых образов
-docker image prune -a
-```
-
----
-
-#### Диагностика проблем
-
-**Проблема: образ vision-base не найден**
-```bash
-# Решение: сначала собрать базовый образ
-docker build -f Dockerfile.base -t vision-base:latest .
-```
-
-**Проблема: не хватает VRAM**
-```yaml
-# В docker-compose.yml добавьте ограничения
-deploy:
-  resources:
-    limits:
-      memory: 16G
-```
-
-**Проблема: модель долго скачивается**
-```yaml
-# Первый запуск всегда долгий. Используйте volumes для кэша
-volumes:
-  - ./models:/app/models  # Модели сохранятся локально
-```
-
-**Проблема: GLM-OCR не загружается**
-```bash
-# Проверьте HF_TOKEN и что модель не gated
-# GLM-OCR требует подтверждения доступа на HuggingFace
-```
-
----
-
-#### Структура файлов проекта
+Убедитесь, что структура проекта правильная:
 
 ```
 project/
-├── Dockerfile.base           # Базовый слой (PyTorch + общий код)
-├── Dockerfile.lfm25          # Специфичный для LFM2.5-VL
-├── Dockerfile.qwen           # Специфичный для Qwen2.5-VL
-├── Dockerfile.glm            # Специфичный для GLM-OCR
-├── docker-compose.yml        # Оркестрация всех сервисов
-├── requirements.base.txt     # Общие зависимости
-├── requirements.lfm25.txt    # Зависимости LFM2.5-VL
-├── requirements.qwen.txt     # Зависимости Qwen2.5-VL
-├── requirements.glm.txt      # Зависимости GLM-OCR
-├── .env                      # Переменные окружения
-├── build.sh                  # Скрипт сборки образов
-├── main.py                   # FastAPI приложение
-├── shared/                   # Общий код
-│   ├── config.py
-│   ├── model_configs.py      # Реестр моделей ← добавлять сюда
-│   ├── schemas.py
-│   ├── prepare_image.py
-│   ├── backend/
-│   │   ├── base.py
-│   │   └── transformers.py
-│   └── strategies/
-│       └── transformers_strategies.py ← добавлять стратегии сюда
-└── workers/
-    └── vision_worker.py
+├── build.sh                 # Скрипт сборки
+├── docker-compose.yml       # Запуск сервисов
+├── .env                     # Переменные окружения (HF_TOKEN обязательно)
+├── dockerfiles/
+│   ├── Dockerfile.base
+│   ├── Dockerfile.lfm25
+│   ├── Dockerfile.qwen
+│   ├── Dockerfile.glm
+│   └── Dockerfile.lighton
+├── requirements/
+│   ├── base.txt
+│   ├── lfm25.txt
+│   ├── qwen.txt
+│   ├── glm.txt
+│   └── lighton.txt
+└── (остальной код: main.py, shared/, workers/)
 ```
+
+### 2. Дать права на выполнение скрипта (только первый раз)
+
+```bash
+chmod +x build.sh
+```
+
+Без этого команда `./build.sh` выдаст ошибку "Permission denied".
+
+---
+
+### 3. Сборка образов
+
+#### Собрать все модели (обычный запуск)
+
+```bash
+./build.sh
+```
+
+Что произойдёт:
+- Соберётся базовый образ `vision-base:latest`
+- Последовательно соберутся все модели: lfm25, qwen, glm, lighton
+- Каждая модель получит свой образ: `vision-lfm25:latest`, `vision-qwen:latest` и т.д.
+
+**Время сборки:**第一次 10-30 минут (скачиваются зависимости), повторно 1-3 минуты (используется кэш).
+
+#### Собрать только одну модель
+
+```bash
+./build.sh qwen
+```
+
+Когда использовать:
+- Вы добавили новую стратегию только для Qwen
+- У вас мало места на диске
+- Вы тестируете одну модель и не хотите ждать сборку остальных
+
+После этой команды нужно запускать только соответствующий сервис:
+```bash
+docker-compose up -d qwen25-vl
+```
+
+**Важно:** Если вы меняли `Dockerfile.base` или общие файлы (shared/, workers/), нужно сначала пересобрать base:
+```bash
+./build.sh base      # пересобрать базовый слой
+./build.sh qwen      # потом модель
+```
+
+#### Сборка без кэша (--no-cache)
+
+```bash
+./build.sh --no-cache
+```
+
+**Когда это нужно:**
+
+| Проблема | Решение |
+|----------|---------|
+| `pip install` выдаёт ошибки про старые версии | Кэш pip мог испортиться |
+| Docker выдаёт `no matching manifest` | Кэш образа повреждён |
+| После изменения `requirements/*.txt` образ не обновляется | Docker не видит изменений в файлах |
+| Странные ошибки импорта в Python | Кэш содержит битые слои |
+| Хотите гарантированно чистую сборку | На проде перед релизом |
+
+`--no-cache` заставляет Docker пересобрать всё с нуля, игнорируя сохранённые слои. **Минус:** сборка дольше в 2-3 раза.
+
+---
+
+### 4. Запуск сервисов
+
+#### Запустить все модели
+
+```bash
+docker-compose up -d
+```
+
+#### Запустить только конкретную модель
+
+```bash
+docker-compose up -d qwen25-vl
+```
+
+Порты:
+- LFM2.5-VL → 8249
+- Qwen2.5-VL → 8349
+- GLM-OCR → 8399
+- LightOnOCR → 8499
+
+#### Проверка статуса
+
+```bash
+docker-compose ps
+```
+
+Вывод должен показывать `Up` для всех запущенных сервисов.
+
+#### Проверка health endpoint
+
+```bash
+curl http://localhost:8349/health
+```
+
+Ответ при готовности:
+```json
+{"status":"healthy","backend":"transformers","model":"qwen25-vl","tasks_processed":0,"queue_size":0}
+```
+
+Если модель ещё загружается (первые минуты):
+```json
+{"status":"loading","backend":"transformers","model":"qwen25-vl","message":"Model is still loading"}
+```
+
+---
+
+### 5. Типичный рабочий процесс
+
+#### Первый запуск
+```bash
+chmod +x build.sh
+./build.sh                # 10-30 минут, зависит от скорости интернета
+docker-compose up -d
+docker-compose logs -f qwen25-vl   # смотреть логи, ждать загрузки модели
+```
+
+#### После изменения кода модели (например, qwen_strategy.py)
+```bash
+./build.sh qwen           # пересобрать только Qwen (1-2 минуты)
+docker-compose up -d --force-recreate qwen25-vl   # перезапустить с новым образом
+```
+
+#### После изменения общего кода (shared/config.py)
+```bash
+./build.sh base           # пересобрать базовый слой
+./build.sh                # пересобрать все модели
+docker-compose up -d --force-recreate
+```
+
+#### Проблемы с зависимостями (ошибки pip)
+```bash
+./build.sh --no-cache qwen   # пересобрать Qwen без кэша
+```
+
+#### Очистка и пересборка всего с нуля
+```bash
+docker-compose down
+docker system prune -a    # ОСТОРОЖНО: удалит все неиспользуемые образы
+./build.sh --no-cache
+docker-compose up -d
+```
+
+---
+
+### 6. Просмотр логов при проблемах
+
+```bash
+# Логи конкретного сервиса
+docker-compose logs -f qwen25-vl
+
+# Только ошибки
+docker-compose logs qwen25-vl 2>&1 | grep -i error
+
+# Последние 100 строк
+docker-compose logs --tail=100 qwen25-vl
+```
+
+---
+
+### 7. Остановка
+
+```bash
+# Остановить всё
+docker-compose down
+
+# Остановить конкретный сервис
+docker-compose stop qwen25-vl
+```
+
+### 8. Полная очистка Docker
+
+#### 1. Остановить и удалить контейнеры
+
+```bash
+# Остановить все запущенные контейнеры
+docker-compose down
+
+# Остановить и удалить volumes (модели, логи - всё!)
+docker-compose down -v
+```
+
+#### 2. Удалить образы Vision Service
+
+```bash
+# Удалить все образы vision-*
+docker rmi vision-base:latest vision-lfm25:latest vision-qwen:latest vision-glm:latest vision-lighton:latest
+
+# Или одной командой
+docker images | grep "vision-" | awk '{print $3}' | xargs docker rmi -f
+```
+
+#### 3. Полная очистка Docker (осторожно!)
+
+```bash
+# Удалить все неиспользуемые образы, контейнеры, сети
+docker system prune -a
+
+# Добавить удаление volumes (ВНИМАНИЕ: удалит всё!)
+docker system prune -a --volumes
+```
+
+#### 4. Очистка кэша моделей (если нужно)
+
+```bash
+# Удалить локально скачанные модели HuggingFace
+rm -rf ./models/*
+
+# Или если использовали HF кэш по умолчанию
+rm -rf ~/.cache/huggingface/
+```
+
+#### 5. Полный сброс (всё перечисленное вместе)
+
+```bash
+# Скрипт для полной очистки
+docker-compose down -v
+docker images | grep "vision-" | awk '{print $3}' | xargs docker rmi -f
+docker system prune -f
+rm -rf ./models/*
+```
+
+После этого система чиста, можно начинать сборку заново.
+
+---
+
+### Краткая шпаргалка
+
+| Что нужно | Команда |
+|-----------|---------|
+| Первая сборка | `./build.sh && docker-compose up -d` |
+| Пересобрать всё | `./build.sh && docker-compose up -d --force-recreate` |
+| Пересобрать одну модель | `./build.sh qwen && docker-compose up -d --force-recreate qwen25-vl` |
+| Сборка без кэша | `./build.sh --no-cache` |
+| Посмотреть логи | `docker-compose logs -f qwen25-vl` |

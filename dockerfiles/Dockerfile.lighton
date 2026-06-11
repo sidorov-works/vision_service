@@ -4,8 +4,8 @@
 # ВНИМАНИЕ: Требует transformers >= 5.0.0 (из исходников)
 FROM vision-base:latest
 
-COPY requirements.lighton.txt .
-RUN pip install --no-cache-dir -r requirements.lighton.txt
+COPY requirements/lighton.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 ENV BACKEND=transformers
 ENV MODEL=lighton

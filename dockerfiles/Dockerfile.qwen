@@ -5,8 +5,8 @@ FROM vision-base:latest
 
 # Устанавливаем специфичные зависимости для Qwen2.5-VL
 # ВНИМАНИЕ: Qwen2.5-VL требует дополнительную библиотеку qwen-vl-utils
-COPY requirements.qwen.txt .
-RUN pip install --no-cache-dir -r requirements.qwen.txt
+COPY requirements/qwen.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Переменные окружения для этой модели
 ENV BACKEND=transformers 

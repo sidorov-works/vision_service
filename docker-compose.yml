@@ -14,7 +14,7 @@ services:
   lfm25-vl:
     build:
       context: .
-      dockerfile: Dockerfile.lfm25
+      dockerfile: dockerfiles/Dockerfile.lfm25
     image: vision-lfm25:latest
     container_name: vision-lfm25
     ports:
@@ -55,7 +55,7 @@ services:
   qwen25-vl:
     build:
       context: .
-      dockerfile: Dockerfile.qwen
+      dockerfile: dockerfiles/Dockerfile.qwen
     image: vision-qwen:latest
     container_name: vision-qwen
     ports:
@@ -97,7 +97,7 @@ services:
   glm-ocr:
     build:
       context: .
-      dockerfile: Dockerfile.glm
+      dockerfile: dockerfiles/Dockerfile.glm
     image: vision-glm:latest
     container_name: vision-glm
     ports:
@@ -135,39 +135,39 @@ services:
 # Порт: 8499
 # ВНИМАНИЕ: Требует transformers >= 5.0.0 (из исходников)
 # ================================================================
-lighton:
-  build:
-    context: .
-    dockerfile: Dockerfile.lighton
-  image: vision-lighton:latest
-  container_name: vision-lighton
-  ports:
-    - "8499:8080"
-  environment:
-    - MODEL=lighton
-    - BACKEND=transformers
-    - DEVICE=cuda
-    - HF_TOKEN=${HF_TOKEN}
-    - MODELS_ROOT=/app/models
-    - LOG_PATH=/app/logs
-    - LOGGING_LEVEL=INFO
-  volumes:
-    - ./models:/app/models
-    - ./logs:/app/logs
-    - ./.env:/app/.env
-  deploy:
-    resources:
-      reservations:
-        devices:
-          - driver: nvidia
-            count: 1
-            capabilities: [gpu]
-  restart: unless-stopped
-  networks:
-    - vision-network
-  healthcheck:
-    test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
-    interval: 30s
-    timeout: 10s
-    retries: 3
-    start_period: 120s
+  lighton:
+    build:
+      context: .
+      dockerfile: dockerfiles/Dockerfile.lighton
+    image: vision-lighton:latest
+    container_name: vision-lighton
+    ports:
+      - "8499:8080"
+    environment:
+      - MODEL=lighton
+      - BACKEND=transformers
+      - DEVICE=cuda
+      - HF_TOKEN=${HF_TOKEN}
+      - MODELS_ROOT=/app/models
+      - LOG_PATH=/app/logs
+      - LOGGING_LEVEL=INFO
+    volumes:
+      - ./models:/app/models
+      - ./logs:/app/logs
+      - ./.env:/app/.env
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+    networks:
+      - vision-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
