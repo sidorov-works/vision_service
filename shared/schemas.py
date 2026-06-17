@@ -1,3 +1,5 @@
+# shared/schemas.py
+
 """
 Pydantic модели для Vision Service (OCR + описание).
 """
