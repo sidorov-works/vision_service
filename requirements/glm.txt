@@ -11,5 +11,5 @@ accelerate==1.13.0
 # Токенизатор (будет установлен вместе с transformers)
 tokenizers
 
-# Безопасные тензоры
-safetensors==0.7.0
+# # Безопасные тензоры
+# safetensors==0.8.0

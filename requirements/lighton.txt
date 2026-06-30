@@ -6,4 +6,4 @@ git+https://github.com/huggingface/transformers.git
 
 accelerate==1.13.0
 tokenizers
-safetensors==0.7.0
+# safetensors==0.8.0
