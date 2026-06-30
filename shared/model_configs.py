@@ -18,12 +18,14 @@ class ModelConfig:
         strategy_key: str,                         # ключ в STRATEGY_REGISTRY
         default_prompt: Optional[str] = None,      # дефолтный промпт для модели
         generation_params: Optional[Dict[str, Any]] = None,  # параметры генерации (max_tokens, temp, и т.д.)
+        trust_remote_code: bool = False
     ):
         self.transformers_id = transformers_id
         self.mlx_id = mlx_id
         self.strategy_key = strategy_key
         self.default_prompt = default_prompt
         self.generation_params = generation_params or {}
+        self.trust_remote_code = trust_remote_code
 
     def create_transformers_strategy(self):
         """Создаёт стратегию для Transformers бэкенда."""
@@ -110,13 +112,14 @@ MODEL_REGISTRY: Dict[str, ModelConfig] = {
         transformers_id="LiquidAI/LFM2.5-VL-450M",
         mlx_id="LiquidAI/LFM2.5-VL-450M-MLX-8bit",
         strategy_key="lfm25-vl",
-        default_prompt="What do you see in this image?",
+        default_prompt="Describe this image in detail.",
         generation_params={
             "max_new_tokens": 512,
             "do_sample": True,
             "temperature": 0.1,
             "min_p": 0.15,
             "repetition_penalty": 1.05,
-        }
-    ),
+        },
+        trust_remote_code=True 
+    )
 }

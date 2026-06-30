@@ -337,59 +337,170 @@ class Qwen25VLStrategy(InferenceStrategy):
 # LFM2.5-VL-450M
 # ======================================================================
 
+# class LFM25VLStrategy(InferenceStrategy):
+#     """
+#     Стратегия инференса для LFM2.5-VL-450M от Liquid AI.
+    
+#     Особенности:
+#     - Лёгкая VLM-модель (450M параметров)
+#     - Поддерживает мультиязычность (включая русский)
+#     - Работает на обоих бэкендах (Transformers и MLX)
+#     - Параметры генерации задаются в ModelConfig.generation_params
+#     """
+
+#     def __init__(self):
+#         self.model = None
+#         self.processor = None
+
+#     async def load_model(self, model_id: str, cache_dir: Path, device: str):
+#         from transformers import AutoModelForVision2Seq, AutoProcessor
+
+#         logger.info(f"Загрузка LFM2.5-VL: {model_id} на {device}")
+
+#         def _load():
+#             processor = AutoProcessor.from_pretrained(
+#                 model_id,
+#                 trust_remote_code=True,
+#                 cache_dir=str(cache_dir)
+#             )
+            
+#             # Проверяем реальную доступность CUDA
+#             torch_dtype, device_map = _get_dtype_and_device_map(device)
+            
+#             model = AutoModelForVision2Seq.from_pretrained(
+#                 model_id,
+#                 trust_remote_code=True,
+#                 dtype=torch_dtype,
+#                 device_map=device_map,
+#                 cache_dir=str(cache_dir)
+#             )
+#             model.eval()
+#             return processor, model
+
+#         self.processor, self.model = await asyncio.to_thread(_load)
+#         logger.info(f"LFM2.5-VL загружена")
+
+#     async def infer(self, image_bytes: bytes, prompt: str, generation_params: Optional[Dict[str, Any]] = None) -> str:
+#         """
+#         Универсальный инференс для LFM2.5-VL.
+        
+#         Параметры генерации (max_new_tokens, temperature, min_p, repetition_penalty и т.д.)
+#         полностью берутся из generation_params, переданных из бэкенда.
+#         """
+#         image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        
+#         # Параметры по умолчанию — только на случай, если generation_params не передан
+#         params = {
+#             "max_new_tokens": 512,
+#             "do_sample": True,
+#             "temperature": 0.1,
+#             "min_p": 0.15,
+#             "repetition_penalty": 1.05,
+#         }
+#         if generation_params:
+#             params.update(generation_params)
+
+#         def _infer():
+#             messages = [{
+#                 "role": "user",
+#                 "content": [{"type": "image", "image": image}, {"type": "text", "text": prompt}]
+#             }]
+#             inputs = self.processor.apply_chat_template(
+#                 messages, add_generation_prompt=True,
+#                 tokenize=True, return_dict=True, return_tensors="pt"
+#             ).to(self.model.device)
+
+#             with torch.no_grad():
+#                 outputs = self.model.generate(
+#                     **inputs,
+#                     max_new_tokens=params["max_new_tokens"],
+#                     do_sample=params.get("do_sample", False),
+#                     temperature=params.get("temperature", 0.1),
+#                     min_p=params.get("min_p"),
+#                     repetition_penalty=params.get("repetition_penalty", 1.0),
+#                 )
+
+#             response = self.processor.decode(
+#                 outputs[0][inputs["input_ids"].shape[1]:],
+#                 skip_special_tokens=True
+#             )
+#             return response.strip()
+
+#         return await asyncio.to_thread(_infer)
+
+#     def cleanup(self):
+#         """Освобождение GPU памяти."""
+#         if self.model:
+#             del self.model
+#             if torch.cuda.is_available():
+#                 torch.cuda.empty_cache()
+#             self.model = None
+#             self.processor = None
+
+# ======================================================================
+# LFM2.5-VL-450M (ПРАВИЛЬНАЯ ВЕРСИЯ)
+# ======================================================================
+
 class LFM25VLStrategy(InferenceStrategy):
     """
     Стратегия инференса для LFM2.5-VL-450M от Liquid AI.
     
-    Особенности:
-    - Лёгкая VLM-модель (450M параметров)
-    - Поддерживает мультиязычность (включая русский)
-    - Работает на обоих бэкендах (Transformers и MLX)
-    - Параметры генерации задаются в ModelConfig.generation_params
+    ВНИМАНИЕ: 
+    - Требует transformers >= 5.2.0
+    - Использует AutoModelForImageTextToText (НЕ AutoModelForVision2Seq!)
+    - trust_remote_code=True ОБЯЗАТЕЛЬНО
+    - Кастомный токенизатор загружается через AutoTokenizer
     """
-
+    
     def __init__(self):
         self.model = None
         self.processor = None
+        self.tokenizer = None  # ← добавить
 
     async def load_model(self, model_id: str, cache_dir: Path, device: str):
-        from transformers import AutoModelForVision2Seq, AutoProcessor
-
+        from transformers import (
+            AutoModelForImageTextToText,  # ← правильный класс
+            AutoProcessor,
+            AutoTokenizer  # ← добавить
+        )
+        
         logger.info(f"Загрузка LFM2.5-VL: {model_id} на {device}")
 
         def _load():
-            processor = AutoProcessor.from_pretrained(
+            # 1. Сначала токенизатор (с кастомным кодом)
+            tokenizer = AutoTokenizer.from_pretrained(
                 model_id,
-                trust_remote_code=True,
+                trust_remote_code=True,  # ← обязательно
                 cache_dir=str(cache_dir)
             )
             
-            # Проверяем реальную доступность CUDA
+            # 2. Процессор
+            processor = AutoProcessor.from_pretrained(
+                model_id,
+                trust_remote_code=True,  # ← обязательно
+                cache_dir=str(cache_dir)
+            )
+            
+            # 3. Модель
             torch_dtype, device_map = _get_dtype_and_device_map(device)
             
-            model = AutoModelForVision2Seq.from_pretrained(
+            model = AutoModelForImageTextToText.from_pretrained(  # ← правильный класс
                 model_id,
-                trust_remote_code=True,
-                dtype=torch_dtype,
+                trust_remote_code=True,  # ← обязательно
+                torch_dtype=torch_dtype,
                 device_map=device_map,
                 cache_dir=str(cache_dir)
             )
             model.eval()
-            return processor, model
-
-        self.processor, self.model = await asyncio.to_thread(_load)
-        logger.info(f"LFM2.5-VL загружена")
+            return tokenizer, processor, model
+        
+        self.tokenizer, self.processor, self.model = await asyncio.to_thread(_load)
+        logger.info(f"LFM2.5-VL загружена (tokenizer, processor, model)")
 
     async def infer(self, image_bytes: bytes, prompt: str, generation_params: Optional[Dict[str, Any]] = None) -> str:
-        """
-        Универсальный инференс для LFM2.5-VL.
-        
-        Параметры генерации (max_new_tokens, temperature, min_p, repetition_penalty и т.д.)
-        полностью берутся из generation_params, переданных из бэкенда.
-        """
+        """Инференс через правильный pipeline."""
         image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
         
-        # Параметры по умолчанию — только на случай, если generation_params не передан
         params = {
             "max_new_tokens": 512,
             "do_sample": True,
@@ -401,13 +512,22 @@ class LFM25VLStrategy(InferenceStrategy):
             params.update(generation_params)
 
         def _infer():
+            # Формат для LFM2.5-VL
             messages = [{
                 "role": "user",
-                "content": [{"type": "image", "image": image}, {"type": "text", "text": prompt}]
+                "content": [
+                    {"type": "image", "image": image},
+                    {"type": "text", "text": prompt}
+                ]
             }]
+            
+            # Используем processor.apply_chat_template
             inputs = self.processor.apply_chat_template(
-                messages, add_generation_prompt=True,
-                tokenize=True, return_dict=True, return_tensors="pt"
+                messages,
+                add_generation_prompt=True,
+                tokenize=True,
+                return_dict=True,
+                return_tensors="pt"
             ).to(self.model.device)
 
             with torch.no_grad():
@@ -420,7 +540,8 @@ class LFM25VLStrategy(InferenceStrategy):
                     repetition_penalty=params.get("repetition_penalty", 1.0),
                 )
 
-            response = self.processor.decode(
+            # Декодируем через tokenizer
+            response = self.tokenizer.decode(
                 outputs[0][inputs["input_ids"].shape[1]:],
                 skip_special_tokens=True
             )
@@ -429,14 +550,13 @@ class LFM25VLStrategy(InferenceStrategy):
         return await asyncio.to_thread(_infer)
 
     def cleanup(self):
-        """Освобождение GPU памяти."""
         if self.model:
             del self.model
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
             self.model = None
             self.processor = None
-
+            self.tokenizer = None
 
 # ======================================================================
 # GLM-OCR
